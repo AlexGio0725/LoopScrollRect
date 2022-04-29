@@ -54,5 +54,14 @@ public class LoopScrollRectInspector : Editor
             scroll.SrollToCellWithinTime(index, time);
         }
         EditorGUILayout.EndHorizontal();
+        
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.Space(10, false);
+        time = EditorGUILayout.FloatField("Time", time, GUILayout.Width(w));
+        if(GUILayout.Button("Scroll Within Force", GUILayout.Width(130)))
+        {
+            scroll.SpringCenterTo(index,time);
+        }
+        EditorGUILayout.EndHorizontal();
     }
 }

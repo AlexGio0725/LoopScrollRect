@@ -39,6 +39,7 @@ namespace UnityEngine.UI
         [NonSerialized]
         public LoopScrollSizeHelper sizeHelper = null;
 
+        public bool scrollToCenterProperties = false;
         /// <summary>
         /// When threshold reached, we prepare new items outside view. This will be expanded to at least 1.5 * itemSize.
         /// </summary>
@@ -738,6 +739,109 @@ namespace UnityEngine.UI
             }
             offset = -offset;
             return itemTypeEnd - idx - 1;
+        }
+        
+        public void SpringCenterTo(int index, float time)
+        {
+            if (totalCount >= 0 && (index < 0 || index >= totalCount))
+            {
+                Debug.LogErrorFormat("invalid index {0}", index);
+                return;
+            }
+
+            StopAllCoroutines();
+            if (time <= 0)
+            {
+                RefillCells(index);
+                return;
+            }
+            
+            float dist = 0;
+            var currentFirst = reverseDirection ? GetLastItem(out var offset) : GetFirstItem(out offset);
+            var targetLine = index / contentConstraintCount;
+            var currentLine = currentFirst / contentConstraintCount;
+            if (targetLine == currentLine)
+            {
+                dist = offset;
+            }
+            else
+            {
+                if (sizeHelper != null)
+                {
+                    dist = GetDimension(sizeHelper.GetItemsSize(currentFirst) - sizeHelper.GetItemsSize(index));
+                    dist += offset;
+                }
+                else
+                {
+                    var elementSize = (GetAbsDimension(m_ContentBounds.size) - contentSpacing * (CurrentLines - 1)) /
+                                      CurrentLines;
+                    dist = elementSize * (currentLine - targetLine) + contentSpacing * (currentLine - targetLine - 1);
+                    dist -= offset;
+                }
+            }
+            var position = viewRect.position;
+            dist += direction switch
+            {
+                LoopScrollRectDirection.Vertical => position.y,
+                LoopScrollRectDirection.Horizontal => position.x,
+                _ => 0.0f
+            };
+            StartCoroutine(CenterToCoroutine(-dist, index));
+        }
+
+        private IEnumerator CenterToCoroutine(float dist, int index)
+        {
+            // var rect = viewRect.rect;
+            // m_ViewBounds = new Bounds(rect.center, rect.size);
+            // var itemBounds = GetBounds4Item(index);
+            // var dist = direction switch
+            // {
+            //     LoopScrollRectDirection.Vertical => m_ViewBounds.center.y - itemBounds.center.y,
+            //     LoopScrollRectDirection.Horizontal => itemBounds.center.x - m_ViewBounds.center.x,
+            //     _ => 0.0f
+            // };
+            float duration = 0.5f;
+            float speed = dist * 2 / duration;
+            float acceleration = speed / duration;
+            while (duration >= 0)
+            {
+                yield return null;
+                if (m_Dragging) continue;
+                float move = 0;
+                float dt = Time.deltaTime;
+                var vt = speed - acceleration * dt;
+                move = (speed + vt) * dt * 0.5f;
+                speed = vt;
+                duration -= dt;
+                dist -= move;
+                if (duration <= 0)
+                {
+                    move = dist;
+                    // var rect = viewRect.rect;
+                    // m_ViewBounds = new Bounds(rect.center, rect.size);
+                    // var itemBounds = GetBounds4Item(index);
+                    // var offset = direction switch
+                    // {
+                    //     LoopScrollRectDirection.Vertical => m_ViewBounds.center.y - itemBounds.center.y,
+                    //     LoopScrollRectDirection.Horizontal => itemBounds.center.x - m_ViewBounds.center.x,
+                    //     _ => 0.0f
+                    // };
+                    // move = offset;
+                }
+
+                if (move == 0) continue;
+                {
+                    var offset = GetVector(move);
+                    content.anchoredPosition += offset;
+                    m_PrevPosition += offset;
+                    m_ContentStartPosition += offset;
+                    UpdateBounds(true);
+                }
+
+            }
+
+            StopMovement();
+            UpdatePrevData();
         }
         
         public void SrollToCell(int index, float speed)
@@ -1496,6 +1600,66 @@ namespace UnityEngine.UI
             }
             //==========LoopScrollRect==========
         }
+        
+        private int FindClosestIndexToCenter()
+        {
+            var rect = viewRect.rect;
+            m_ViewBounds = new Bounds(rect.center, rect.size);
+            var closestIndex = itemTypeStart;
+            var closestDistance = float.MaxValue;
+
+            for (var i = itemTypeStart; i < itemTypeEnd; i++)
+            {
+                var childIdx = i - itemTypeStart;
+
+                if (childIdx >= 0 && childIdx < content.childCount)
+                {
+                    var itemBounds = GetBounds4Item(i);
+
+                    var itemDistance = float.MaxValue;
+                    if (direction == LoopScrollRectDirection.Vertical)
+                        itemDistance = Mathf.Abs(m_ViewBounds.center.y - itemBounds.center.y);
+                    else if (direction == LoopScrollRectDirection.Horizontal)
+                        itemDistance = Mathf.Abs(itemBounds.center.x - m_ViewBounds.center.x);
+
+                    if (itemDistance < closestDistance)
+                    {
+                        closestIndex = i;
+                        closestDistance = itemDistance;
+                    }
+                }
+            }
+
+            return closestIndex;
+        }
+
+        void Update()
+        {
+            if(Input.GetKeyDown(KeyCode.A))
+                SnapToCenter();
+        }
+
+        private void SnapToCenter()
+        {
+            if(!scrollToCenterProperties) return;
+            var index = FindClosestIndexToCenter();
+            var rect = viewRect.rect;
+            m_ViewBounds = new Bounds(rect.center, rect.size);
+            var itemBounds = GetBounds4Item(index);
+            var delta = direction switch
+            {
+                LoopScrollRectDirection.Vertical => m_ViewBounds.center.y - itemBounds.center.y,
+                LoopScrollRectDirection.Horizontal => itemBounds.center.x - m_ViewBounds.center.x,
+                _ => 0.0f
+            };
+            var offset = GetVector(delta);
+            content.anchoredPosition += offset;
+            m_PrevPosition += offset;
+            m_ContentStartPosition += offset;
+            UpdateBounds(true);
+            Debug.Log($"On Center {index}");
+        }
+        
 
         protected virtual void LateUpdate()
         {
@@ -1520,20 +1684,25 @@ namespace UnityEngine.UI
                             smoothTime *= 3.0f;
                         position[axis] = Mathf.SmoothDamp(m_Content.anchoredPosition[axis], m_Content.anchoredPosition[axis] + offset[axis], ref speed, smoothTime, Mathf.Infinity, deltaTime);
                         if (Mathf.Abs(speed) < 1)
+                        {
                             speed = 0;
+                        }
                         m_Velocity[axis] = speed;
                     }
                     // Else move content according to velocity with deceleration applied.
                     else if (m_Inertia)
                     {
                         m_Velocity[axis] *= Mathf.Pow(m_DecelerationRate, deltaTime);
-                        if (Mathf.Abs(m_Velocity[axis]) < 1)
+                        if (Mathf.Abs(m_Velocity[axis]) < 20)
+                        {
                             m_Velocity[axis] = 0;
+                        }
                         position[axis] += m_Velocity[axis] * deltaTime;
                     }
                     // If we have neither elaticity or friction, there shouldn't be any velocity.
                     else
                     {
+                        Debug.Log("set to 0");
                         m_Velocity[axis] = 0;
                     }
                 }
@@ -1543,8 +1712,10 @@ namespace UnityEngine.UI
                     offset = CalculateOffset(position - m_Content.anchoredPosition);
                     position += offset;
                 }
-
-                SetContentAnchoredPosition(position);
+                if (scrollToCenterProperties && m_Velocity.sqrMagnitude < 1)
+                    SnapToCenter();
+                else                
+                    SetContentAnchoredPosition(position);
             }
 
             if (m_Dragging && m_Inertia)
