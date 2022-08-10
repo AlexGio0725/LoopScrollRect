@@ -42,11 +42,13 @@ namespace UnityEngine.UI
         {
             direction = LoopScrollRectDirection.Vertical;
             base.Awake();
-
-            GridLayoutGroup layout = m_Content.GetComponent<GridLayoutGroup>();
-            if (layout != null && layout.constraint != GridLayoutGroup.Constraint.FixedColumnCount)
+            if (m_Content)
             {
-                Debug.LogError("[LoopHorizontalScrollRect] unsupported GridLayoutGroup constraint");
+                GridLayoutGroup layout = m_Content.GetComponent<GridLayoutGroup>();
+                if (layout != null && layout.constraint != GridLayoutGroup.Constraint.FixedColumnCount)
+                {
+                    Debug.LogError("[LoopScrollRect] unsupported GridLayoutGroup constraint");
+                }
             }
         }
 
@@ -55,7 +57,7 @@ namespace UnityEngine.UI
             bool changed = false;
 
             // special case: handling move several page in one frame
-            if (viewBounds.max.y < contentBounds.min.y && itemTypeEnd > itemTypeStart)
+            if ((viewBounds.size.y < contentBounds.min.y - viewBounds.max.y) && itemTypeEnd > itemTypeStart)
             {
                 int maxItemTypeStart = -1;
                 if (totalCount >= 0)
@@ -87,7 +89,7 @@ namespace UnityEngine.UI
                 changed = true;
             }
 
-            if (viewBounds.min.y > contentBounds.max.y && itemTypeEnd > itemTypeStart)
+            if ((viewBounds.min.y - contentBounds.max.y > viewBounds.size.y) && itemTypeEnd > itemTypeStart)
             {
                 float currentSize = contentBounds.size.y;
                 float elementSize = (currentSize - contentSpacing * (CurrentLines - 1)) / CurrentLines;
@@ -138,7 +140,7 @@ namespace UnityEngine.UI
                     changed = true;
             }
 
-            if (viewBounds.min.y < contentBounds.min.y + threshold + m_ContentBottomPadding)
+            if (viewBounds.min.y < contentBounds.min.y + m_ContentBottomPadding)
             {
                 float size = NewItemAtEnd(), totalSize = size;
                 while (size > 0 && viewBounds.min.y < contentBounds.min.y + m_ContentBottomPadding - totalSize)
@@ -150,7 +152,7 @@ namespace UnityEngine.UI
                     changed = true;
             }
 
-            if (viewBounds.max.y > contentBounds.max.y - threshold - m_ContentTopPadding)
+            if (viewBounds.max.y > contentBounds.max.y - m_ContentTopPadding)
             {
                 float size = NewItemAtStart(), totalSize = size;
                 while (size > 0 && viewBounds.max.y > contentBounds.max.y - m_ContentTopPadding + totalSize)

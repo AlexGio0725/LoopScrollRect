@@ -674,9 +674,12 @@ namespace UnityEngine.UI
             if (Application.isPlaying)
             {
                 float value = (reverseDirection ^ (direction == LoopScrollRectDirection.Horizontal)) ? 0 : 1;
-                Debug.Assert(GetAbsDimension(m_Content.pivot) == value, this);
-                Debug.Assert(GetAbsDimension(m_Content.anchorMin) == value, this);
-                Debug.Assert(GetAbsDimension(m_Content.anchorMax) == value, this);
+                if (m_Content != null)
+                {
+                    Debug.Assert(GetAbsDimension(m_Content.pivot) == value, this);
+                    Debug.Assert(GetAbsDimension(m_Content.anchorMin) == value, this);
+                    Debug.Assert(GetAbsDimension(m_Content.anchorMax) == value, this);
+                }
                 if (direction == LoopScrollRectDirection.Vertical)
                     Debug.Assert(m_Vertical && !m_Horizontal, this);
                 else
@@ -888,7 +891,7 @@ namespace UnityEngine.UI
             {
                 if (sizeHelper != null)
                 {
-                    dist = GetDimension(sizeHelper.GetItemsSize(currentFirst) - sizeHelper.GetItemsSize(index));
+                    dist = GetDimension(sizeHelper.GetItemsSize(currentFirst) - sizeHelper.GetItemsSize(index)) + contentSpacing * (CurrentLine - TargetLine - 1);
                     dist += offset;
                 }
                 else
@@ -979,7 +982,7 @@ namespace UnityEngine.UI
         protected abstract void ProvideData(Transform transform, int index);
 
         /// <summary>
-        /// Refresh item data (if totalCount increases, please call `RefillCells` instead)
+        /// Refresh item data
         /// </summary>
         public void RefreshCells()
         {
@@ -1755,7 +1758,7 @@ namespace UnityEngine.UI
         {
             if (sizeHelper != null)
             {
-                totalSize = sizeHelper.GetItemsSize(TotalLines).x;
+                totalSize = sizeHelper.GetItemsSize(TotalLines).x + contentSpacing * (TotalLines - 1);
                 offset = m_ContentBounds.min.x - sizeHelper.GetItemsSize(StartLine).x - contentSpacing * StartLine;
             }
             else
@@ -1770,7 +1773,7 @@ namespace UnityEngine.UI
         {
             if (sizeHelper != null)
             {
-                totalSize = sizeHelper.GetItemsSize(TotalLines).y;
+                totalSize = sizeHelper.GetItemsSize(TotalLines).y + contentSpacing * (TotalLines - 1);
                 offset = m_ContentBounds.max.y + sizeHelper.GetItemsSize(StartLine).y + contentSpacing * StartLine;
             }
             else
@@ -2196,28 +2199,21 @@ namespace UnityEngine.UI
             if (m_Content == null)
                 return;
 
+            // ============LoopScrollRect============
+            // Don't do this in Rebuild. Make use of ContentBounds before Adjust here.
+            if (Application.isPlaying && updateItems && UpdateItems(ref m_ViewBounds, ref m_ContentBounds))
+            {
+                EnsureLayoutHasRebuilt();
+                m_ContentBounds = GetBounds();
+            }
+            // ============LoopScrollRect============
+            
             Vector3 contentSize = m_ContentBounds.size;
             Vector3 contentPos = m_ContentBounds.center;
             var contentPivot = m_Content.pivot;
             AdjustBounds(ref m_ViewBounds, ref contentPivot, ref contentSize, ref contentPos);
             m_ContentBounds.size = contentSize;
             m_ContentBounds.center = contentPos;
-
-            // ============LoopScrollRect============
-            // Don't do this in Rebuild
-            if (Application.isPlaying && updateItems && UpdateItems(ref m_ViewBounds, ref m_ContentBounds))
-            {
-                EnsureLayoutHasRebuilt();
-                m_ContentBounds = GetBounds();
-                // adjust again
-                contentSize = m_ContentBounds.size;
-                contentPos = m_ContentBounds.center;
-                contentPivot = m_Content.pivot;
-                AdjustBounds(ref m_ViewBounds, ref contentPivot, ref contentSize, ref contentPos);
-                m_ContentBounds.size = contentSize;
-                m_ContentBounds.center = contentPos;
-            }
-            // ============LoopScrollRect============
 
             if (movementType == MovementType.Clamped)
             {
